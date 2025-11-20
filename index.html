@@ -91,16 +91,46 @@
       <section class="grid two-col">
         <article class="card">
           <h2>Registreer echte aankomst</h2>
+          <div class="admin-login">
+            <label>
+              Admin code
+              <input
+                type="password"
+                id="adminSecret"
+                placeholder="Geheime code"
+                autocomplete="current-password"
+              />
+            </label>
+            <div class="admin-login-actions">
+              <button type="button" class="secondary" id="adminLoginButton">
+                Ontgrendel
+              </button>
+              <button type="button" class="text-button" id="adminLogoutButton" hidden>
+                Uitloggen
+              </button>
+            </div>
+            <p class="admin-status" id="adminStatus">
+              Alleen admins kunnen aankomsten loggen.
+            </p>
+          </div>
           <form id="arrivalForm">
             <label>
               Datum
-              <input type="date" name="date" id="arrivalDate" required />
+              <input
+                type="date"
+                name="date"
+                id="arrivalDate"
+                data-lockable="true"
+                required
+              />
             </label>
             <label>
               Aankomsttijd
-              <select name="slot" id="arrivalSlot" required></select>
+              <select name="slot" id="arrivalSlot" data-lockable="true" required></select>
             </label>
-            <button type="submit" class="secondary">Log aankomst</button>
+            <button type="submit" class="secondary" data-lockable="true">
+              Log aankomst
+            </button>
           </form>
           <p class="hint">
             Zodra je een dag invult worden alle inzetten voor die datum
@@ -146,6 +176,9 @@
       Made with ❤️ voor de kantoorhumor crew.
     </footer>
 
+    <script>
+      window.API_BASE = "https://laatkomers.onrender.com";
+    </script>
     <script src="app.js" type="module"></script>
   </body>
 </html>

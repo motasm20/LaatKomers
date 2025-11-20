@@ -9,6 +9,7 @@ const __dirname = path.dirname(__filename);
 
 const SLOT_OPTIONS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
 const HISTORY_WINDOW = 7;
+const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
 
 const app = express();
 const db = new Database(path.join(__dirname, "data.db"));
@@ -50,7 +51,23 @@ app.post("/api/bets", (req, res) => {
   return res.json({ success: true, state: composeState() });
 });
 
-app.post("/api/arrivals", (req, res) => {
+app.post("/api/login", (req, res) => {
+  if (!ADMIN_SECRET) {
+    return res
+      .status(500)
+      .json({ error: "ADMIN_SECRET ontbreekt op de server." });
+  }
+  const { secret } = req.body || {};
+  if (!secret) {
+    return res.status(400).json({ error: "Secret is verplicht." });
+  }
+  if (secret !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "Ongeldige admin code." });
+  }
+  return res.json({ success: true });
+});
+
+app.post("/api/arrivals", ensureAdmin, (req, res) => {
   const { date, slot } = req.body || {};
   if (!date || !slot || !SLOT_OPTIONS.includes(slot)) {
     return res.status(400).json({ error: "Invalid payload" });
@@ -194,5 +211,18 @@ function settleBets(date, slot) {
       `UPDATE bets SET status='lost', payout=0 WHERE id=?`
     ).run(bet.id);
   });
+}
+
+function ensureAdmin(req, res, next) {
+  if (!ADMIN_SECRET) {
+    return res
+      .status(500)
+      .json({ error: "ADMIN_SECRET is niet ingesteld op de server." });
+  }
+  const header = req.headers["x-admin-key"];
+  if (!header || header !== ADMIN_SECRET) {
+    return res.status(401).json({ error: "Admin authenticatie vereist." });
+  }
+  return next();
 }
 

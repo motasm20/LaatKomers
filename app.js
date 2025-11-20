@@ -1,12 +1,16 @@
+const API_BASE = window.API_BASE || "";
 const SLOT_OPTIONS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
 const HISTORY_WINDOW = 7;
 const HISTORY_DISPLAY = 14;
+const ADMIN_KEY_STORAGE = "betaben_admin_key";
 
 const state = {
   history: [],
   bets: [],
   rollover: 0,
   odds: {},
+  isAdmin: false,
+  adminKey: null,
 };
 
 const elements = {};
@@ -14,6 +18,7 @@ const elements = {};
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   prepareForms();
+  initAdminControls();
   refreshState();
 });
 
@@ -30,6 +35,10 @@ function cacheElements() {
   elements.streakValue = document.getElementById("streakValue");
   elements.hotSlot = document.getElementById("hotSlot");
   elements.potValue = document.getElementById("potValue");
+  elements.adminSecret = document.getElementById("adminSecret");
+  elements.adminLoginButton = document.getElementById("adminLoginButton");
+  elements.adminLogoutButton = document.getElementById("adminLogoutButton");
+  elements.adminStatus = document.getElementById("adminStatus");
 }
 
 function prepareForms() {
@@ -49,7 +58,7 @@ function prepareForms() {
     const slot = formData.get("slot");
 
     if (!bettor || !slot) return;
-    await postJSON("/api/bets", { bettor, amount, slot, date });
+    await postJSON(`${API_BASE}/api/bets`, { bettor, amount, slot, date });
     elements.betForm.reset();
     elements.betDate.value = date;
     refreshState();
@@ -60,14 +69,35 @@ function prepareForms() {
     const formData = new FormData(elements.arrivalForm);
     const date = formData.get("date");
     const slot = formData.get("slot");
-
-    await postJSON("/api/arrivals", { date, slot });
-    refreshState();
+    if (!state.isAdmin || !state.adminKey) {
+      setAdminStatus("Admin login vereist om te loggen.", true);
+      updateAdminUI();
+      return;
+    }
+    try {
+      await postJSON(
+        `${API_BASE}/api/arrivals`,
+        { date, slot },
+        {
+          "x-admin-key": state.adminKey,
+        }
+      );
+      setAdminStatus("Aankomst geregistreerd ✅");
+      refreshState();
+    } catch (err) {
+      if (err.status === 401) {
+        clearAdminKey();
+        setAdminStatus("Code verlopen of fout. Log opnieuw in.", true);
+      } else {
+        setAdminStatus("Registreren mislukt. Probeer opnieuw.", true);
+      }
+      updateAdminUI();
+    }
   });
 }
 
 async function refreshState() {
-  const payload = await fetchJSON("/api/state");
+  const payload = await fetchJSON(`${API_BASE}/api/state`);
   state.history = payload.history ?? [];
   state.bets = payload.bets ?? [];
   state.rollover = payload.rollover ?? 0;
@@ -218,6 +248,75 @@ function getHotSlot() {
   return entries.sort((a, b) => a[1] - b[1])[0][0];
 }
 
+function initAdminControls() {
+  loadAdminKey();
+  elements.adminLoginButton.addEventListener("click", async () => {
+    const secret = elements.adminSecret.value.trim();
+    if (!secret) {
+      setAdminStatus("Vul een code in.", true);
+      return;
+    }
+    try {
+      await postJSON(`${API_BASE}/api/login`, { secret });
+      state.adminKey = secret;
+      state.isAdmin = true;
+      sessionStorage.setItem(ADMIN_KEY_STORAGE, secret);
+      elements.adminSecret.value = "";
+      setAdminStatus("Admin modus actief ✅");
+    } catch (err) {
+      setAdminStatus("Code ongeldig.", true);
+      return;
+    }
+    updateAdminUI();
+  });
+
+  elements.adminLogoutButton.addEventListener("click", () => {
+    clearAdminKey();
+    setAdminStatus("Uitgelogd.");
+    updateAdminUI();
+  });
+
+  updateAdminUI();
+}
+
+function loadAdminKey() {
+  const stored = sessionStorage.getItem(ADMIN_KEY_STORAGE);
+  if (stored) {
+    state.adminKey = stored;
+    state.isAdmin = true;
+    setAdminStatus("Admin modus actief ✅");
+  } else {
+    clearAdminKey();
+  }
+}
+
+function clearAdminKey() {
+  sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+  state.adminKey = null;
+  state.isAdmin = false;
+}
+
+function updateAdminUI() {
+  if (!elements.arrivalForm) return;
+  const lockable = elements.arrivalForm.querySelectorAll("[data-lockable='true']");
+  lockable.forEach((el) => {
+    el.disabled = !state.isAdmin;
+  });
+  elements.adminLogoutButton.hidden = !state.isAdmin;
+  elements.adminLoginButton.disabled = state.isAdmin;
+  elements.adminSecret.disabled = state.isAdmin;
+  elements.adminSecret.placeholder = state.isAdmin ? "Admin actief" : "Geheime code";
+  elements.adminStatus.classList.toggle("active", state.isAdmin);
+  elements.adminStatus.classList.toggle("error", false);
+}
+
+function setAdminStatus(message, isError = false) {
+  if (!elements.adminStatus) return;
+  elements.adminStatus.textContent = message;
+  elements.adminStatus.classList.toggle("active", state.isAdmin && !isError);
+  elements.adminStatus.classList.toggle("error", isError);
+}
+
 function toISODate(date) {
   return date.toISOString().slice(0, 10);
 }
@@ -233,13 +332,20 @@ async function fetchJSON(url) {
   return res.json();
 }
 
-async function postJSON(url, payload) {
+async function postJSON(url, payload, extraHeaders = {}) {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...extraHeaders,
+    },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  if (!res.ok) {
+    const error = new Error(`Request failed: ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
   return res.json();
 }
 
