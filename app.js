@@ -3,6 +3,7 @@ const SLOT_OPTIONS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
 const HISTORY_WINDOW = 7;
 const HISTORY_DISPLAY = 14;
 const ADMIN_KEY_STORAGE = "betaben_admin_key";
+const REFRESH_INTERVAL_MS = 15000;
 
 const state = {
   history: [],
@@ -14,12 +15,15 @@ const state = {
 };
 
 const elements = {};
+let refreshTimer = null;
+let isRefreshing = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   prepareForms();
   initAdminControls();
   refreshState();
+  startAutoRefresh();
 });
 
 function cacheElements() {
@@ -97,15 +101,23 @@ function prepareForms() {
 }
 
 async function refreshState() {
-  const payload = await fetchJSON(`${API_BASE}/api/state`);
-  state.history = payload.history ?? [];
-  state.bets = payload.bets ?? [];
-  state.rollover = payload.rollover ?? 0;
-  state.odds = payload.odds ?? {};
-  renderOddsBoard();
-  renderHistory();
-  renderBetsTable();
-  renderHeroStats();
+  if (isRefreshing) return;
+  isRefreshing = true;
+  try {
+    const payload = await fetchJSON(`${API_BASE}/api/state`);
+    state.history = payload.history ?? [];
+    state.bets = payload.bets ?? [];
+    state.rollover = payload.rollover ?? 0;
+    state.odds = payload.odds ?? {};
+    renderOddsBoard();
+    renderHistory();
+    renderBetsTable();
+    renderHeroStats();
+  } catch (err) {
+    console.warn("Failed to refresh state", err);
+  } finally {
+    isRefreshing = false;
+  }
 }
 
 function renderSlotRadioButtons() {
@@ -315,6 +327,14 @@ function setAdminStatus(message, isError = false) {
   elements.adminStatus.textContent = message;
   elements.adminStatus.classList.toggle("active", state.isAdmin && !isError);
   elements.adminStatus.classList.toggle("error", isError);
+}
+
+function startAutoRefresh() {
+  if (refreshTimer) return;
+  refreshTimer = setInterval(() => {
+    if (document.visibilityState === "hidden") return;
+    refreshState();
+  }, REFRESH_INTERVAL_MS);
 }
 
 function toISODate(date) {
