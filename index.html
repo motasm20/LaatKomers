@@ -12,252 +12,149 @@
       rel="stylesheet"
     />
   </head>
-  <body>
+  <body data-page="public">
     <header class="topbar">
       <div class="brand">
         <div class="logo">Bet-a-Ben</div>
       </div>
       <nav class="nav-links">
-        <button class="nav-link active" data-view-target="play">Game</button>
-        <button class="nav-link" data-view-target="admin">Admin</button>
+        <a class="nav-link active" href="./index.html">Game</a>
+        <a class="nav-link" href="./admin.html">Admin</a>
       </nav>
     </header>
 
     <main>
-      <section class="view active" data-view="play">
-        <section class="hero-card">
-          <div>
-            <p class="eyebrow">Kantoor bookie</p>
-            <h1>Hoe laat rolt hij binnen?</h1>
-            <p class="lede">
-              Kies een timeslot, zet punten in en wacht tot de stagiair daadwerkelijk
-              verschijnt. Odds draaien mee met zijn historische “prestatie”.
-            </p>
-            <div class="hero-cta">
-              <button class="primary ghost" data-view-target="admin">
-                Naar admin dashboard →
-              </button>
+      <section class="hero-card">
+        <div>
+          <p class="eyebrow">Kantoor bookie</p>
+          <h1>Hoe laat rolt hij binnen?</h1>
+          <div class="topic-card">
+            <div>
+              <p class="topic-label">Actief onderwerp</p>
+              <h2 id="activeTopicTitle">Laatkomer</h2>
+              <p id="activeTopicDescription" class="hint">
+                Zodra er een ander onderwerp actief is zie je dat hier.
+              </p>
             </div>
+            <a class="text-button small" href="./admin.html">Admin beheer →</a>
           </div>
-          <div class="hero-stats">
-            <div class="stat glass">
-              <p class="stat-label">Days @ 11:00</p>
-              <span id="streakValue">0</span>
-            </div>
-            <div class="stat glass">
-              <p class="stat-label">Hot streak slot</p>
-              <span id="hotSlot">11:00</span>
-            </div>
-            <div class="stat glass">
-              <p class="stat-label">Pot (€)</p>
-              <span id="potValue">€0.00</span>
-            </div>
+          <p class="lede">
+            Kies een timeslot, zet geld in en wacht tot de stagiair daadwerkelijk
+            verschijnt. Odds draaien mee met zijn historische “prestatie”.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat glass">
+            <p class="stat-label">Days @ 11:00</p>
+            <span id="streakValue">0</span>
           </div>
-        </section>
-
-        <section class="grid two-col">
-          <article class="card">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Stap 1</p>
-                <h2>Maak je gok</h2>
-              </div>
-            </div>
-            <form id="betForm">
-              <label>
-                Naam
-                <input type="text" name="bettor" placeholder="Naam" required />
-              </label>
-              <label>
-                Inzet (punten)
-                  Inzet (€)
-                  <input
-                    type="number"
-                    name="amount"
-                    min="0.5"
-                    step="0.5"
-                    value="10.00"
-                    required
-                  />
-              </label>
-              <label>
-                Datum
-                <input type="date" name="date" id="betDate" required />
-              </label>
-              <fieldset>
-                <legend>Tijdslot</legend>
-                <div id="slotOptions" class="slot-options"></div>
-              </fieldset>
-              <button type="submit" class="primary">Plaats inzet</button>
-            </form>
-          </article>
-
-          <article class="card odds-card">
-            <div class="card-header">
-              <div>
-                <p class="eyebrow">Stap 2</p>
-                <h2>Live odds</h2>
-              </div>
-              <span class="chip">Laatste 7 dagen</span>
-            </div>
-            <div id="oddsBoard" class="odds-board"></div>
-            <p class="hint">
-              Odds = (7 + aantal slots) / (1 + aantal keer dat dit slot voorkwam). Hoe
-              vaker hij een slot hit, hoe lager de multiplier.
-            </p>
-          </article>
-        </section>
-
-        <section class="grid two-col">
-          <article class="card">
-            <div class="card-header">
-              <h2>Historie laatste 14 dagen</h2>
-              <button class="text-button small" data-view-target="admin">
-                Beheer →
-              </button>
-            </div>
-            <ul id="historyList" class="history-list"></ul>
-          </article>
-
-          <article class="card ideas-card">
-            <div class="card-header">
-              <h2>Bonus ideeën</h2>
-            </div>
-            <ul>
-              <li>Leaderboards met badges als “Serial Snoozer” of “Clock Whisperer”.</li>
-              <li>Slack/Teams alerts zodra iemand cashes.</li>
-              <li>Wheel of Misfortune voor strafacties (koffie halen, snack meenemen).</li>
-              <li>Tijdmachine-modus: voorspellen voor de hele week in één keer.</li>
-            </ul>
-          </article>
-        </section>
-
-        <section class="card">
-          <div class="card-header">
-            <h2>Openstaande & afgerekende inzetten</h2>
-            <p class="hint">Live geüpdatet, refresh niet nodig.</p>
+          <div class="stat glass">
+            <p class="stat-label">Hot streak slot</p>
+            <span id="hotSlot">11:00</span>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Datum</th>
-                <th>Naam</th>
-                <th>Tijdslot</th>
-                <th>Inzet</th>
-                <th>Status</th>
-                <th>Payout</th>
-              </tr>
-            </thead>
-            <tbody id="betsTable"></tbody>
-          </table>
-        </section>
-      </section>
-
-      <section class="view" data-view="admin">
-        <div class="view-header">
-          <div>
-            <p class="eyebrow">Admin cockpit</p>
-            <h2>Beheer aankomsten & inzetten</h2>
-            <p class="hint">
-              Ontgrendel met je geheime code en pas registraties direct aan zonder dat iemand
-              de pagina hoeft te refreshen.
-            </p>
+          <div class="stat glass">
+            <p class="stat-label">Pot (€)</p>
+            <span id="potValue">€0.00</span>
           </div>
         </div>
+      </section>
 
-        <section class="grid two-col">
-          <article class="card">
-            <h3>Admin toegang</h3>
-            <div class="admin-login">
-              <label>
-                Admin code
-                <input
-                  type="password"
-                  id="adminSecret"
-                  placeholder="Geheime code"
-                  autocomplete="current-password"
-                />
-              </label>
-              <div class="admin-login-actions">
-                <button type="button" class="secondary" id="adminLoginButton">
-                  Ontgrendel
-                </button>
-                <button type="button" class="text-button" id="adminLogoutButton" hidden>
-                  Uitloggen
-                </button>
-              </div>
-              <p class="admin-status" id="adminStatus">
-                Alleen admins kunnen aankomsten loggen of verwijderen.
-              </p>
-            </div>
-          </article>
-
-          <article class="card">
-            <h3>Log aankomst</h3>
-            <form id="arrivalForm">
-              <label>
-                Datum
-                <input
-                  type="date"
-                  name="date"
-                  id="arrivalDate"
-                  data-lockable="true"
-                  required
-                />
-              </label>
-              <label>
-                Aankomsttijd
-                <select name="slot" id="arrivalSlot" data-lockable="true" required></select>
-              </label>
-              <button type="submit" class="secondary" data-lockable="true">
-                Log aankomst
-              </button>
-              <p class="hint">
-                Zodra je een dag invult worden alle inzetten voor die datum
-                automatisch afgerekend.
-              </p>
-            </form>
-          </article>
-        </section>
-
-        <section class="card admin-panel">
-          <div class="panel-header">
+      <section class="grid two-col">
+        <article class="card">
+          <div class="card-header">
             <div>
-              <h3>Beheer & opschonen</h3>
-              <p class="hint">
-                Verwijder foutieve bets of reset een dag als er verkeerd is gelogd.
-              </p>
+              <p class="eyebrow">Stap 1</p>
+              <h2>Maak je gok</h2>
             </div>
           </div>
-          <div class="admin-columns">
-            <div class="admin-table">
-              <div class="panel-subheader">
-                <h4>Inzetten</h4>
-                <p>Alles chronologisch, laatste bovenaan.</p>
-              </div>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Datum</th>
-                    <th>Naam</th>
-                    <th>Slot</th>
-                    <th>Inzet</th>
-                    <th>Status</th>
-                    <th>Actie</th>
-                  </tr>
-                </thead>
-                <tbody id="adminBetsTable"></tbody>
-              </table>
+          <form id="betForm">
+            <label>
+              Naam
+              <input type="text" name="bettor" placeholder="Naam" required />
+            </label>
+            <label>
+              Inzet (€)
+              <input
+                type="number"
+                name="amount"
+                min="0.5"
+                step="0.5"
+                value="10.00"
+                required
+              />
+            </label>
+            <label>
+              Datum
+              <input type="date" name="date" id="betDate" required />
+            </label>
+            <fieldset>
+              <legend>Tijdslot</legend>
+              <div id="slotOptions" class="slot-options"></div>
+            </fieldset>
+            <p class="hint">
+              Je gok hoort bij onderwerp: <strong id="betTopicLabel">-</strong>
+            </p>
+            <button type="submit" class="primary">Plaats inzet</button>
+          </form>
+        </article>
+
+        <article class="card odds-card">
+          <div class="card-header">
+            <div>
+              <p class="eyebrow">Stap 2</p>
+              <h2>Live odds</h2>
             </div>
-            <div class="admin-table">
-              <div class="panel-subheader">
-                <h4>Aankomsten</h4>
-                <p>Reset een dag om opnieuw te loggen.</p>
-              </div>
-              <ul id="adminHistoryList" class="history-list admin"></ul>
-            </div>
+            <span class="chip">Laatste 7 dagen</span>
           </div>
-        </section>
+          <div id="oddsBoard" class="odds-board"></div>
+          <p class="hint">
+            Odds = (7 + aantal slots) / (1 + aantal keer dat dit slot voorkwam). Hoe
+            vaker hij een slot hit, hoe lager de multiplier.
+          </p>
+        </article>
+      </section>
+
+      <section class="grid two-col">
+        <article class="card">
+          <div class="card-header">
+            <h2>Historie laatste 14 dagen</h2>
+            <a class="text-button small" href="./admin.html">Beheer →</a>
+          </div>
+          <ul id="historyList" class="history-list"></ul>
+        </article>
+
+        <article class="card ideas-card">
+          <div class="card-header">
+            <h2>Bonus ideeën</h2>
+          </div>
+          <ul>
+            <li>Leaderboards met badges als “Serial Snoozer” of “Clock Whisperer”.</li>
+            <li>Slack/Teams alerts zodra iemand cashes.</li>
+            <li>Wheel of Misfortune voor strafacties (koffie halen, snack meenemen).</li>
+            <li>Tijdmachine-modus: voorspellen voor de hele week in één keer.</li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>Openstaande & afgerekende inzetten</h2>
+          <p class="hint">Live geüpdatet, refresh niet nodig.</p>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Naam</th>
+              <th>Onderwerp</th>
+              <th>Tijdslot</th>
+              <th>Inzet</th>
+              <th>Status</th>
+              <th>Payout</th>
+            </tr>
+          </thead>
+          <tbody id="betsTable"></tbody>
+        </table>
       </section>
     </main>
 

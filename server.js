@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 const SLOT_OPTIONS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
 const HISTORY_WINDOW = 7;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
+const WINNER_BONUS_SHARE = 0.4;
 
 const app = express();
 const db = new Database(path.join(__dirname, "data.db"));
@@ -19,6 +20,8 @@ app.use(express.json());
 app.use(express.static(__dirname));
 
 initDb();
+seedDefaultTopic();
+ensureBetTopicColumn();
 
 app.get("/api/state", (_req, res) => {
   const history = getHistory();
@@ -28,6 +31,8 @@ app.get("/api/state", (_req, res) => {
     bets,
     rollover: getRollover(),
     odds: calculateOdds(history),
+    topics: getTopics(),
+    activeTopic: getActiveTopic(),
   });
 });
 
@@ -50,14 +55,25 @@ app.post("/api/bets", (req, res) => {
   const storedAmount = Math.round(numericAmount * 100) / 100;
 
   const odds = calculateOdds(getHistory())[slot] ?? 1.5;
+  const activeTopic = getActiveTopic();
+  const topicId = activeTopic?.id || null;
 
   const stmt = db.prepare(
-    `INSERT INTO bets (id, bettor, amount, slot, date, odds, status, payout, createdAt)
-     VALUES (?, ?, ?, ?, ?, ?, 'open', 0, ?)`
+    `INSERT INTO bets (id, bettor, amount, slot, date, odds, status, payout, createdAt, topicId)
+     VALUES (?, ?, ?, ?, ?, ?, 'open', 0, ?, ?)`
   );
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
-  stmt.run(id, bettor.trim(), storedAmount, slot, date, Number(odds.toFixed(2)), createdAt);
+  stmt.run(
+    id,
+    bettor.trim(),
+    storedAmount,
+    slot,
+    date,
+    Number(odds.toFixed(2)),
+    createdAt,
+    topicId
+  );
 
   return res.json({ success: true, state: composeState() });
 });
@@ -93,6 +109,24 @@ app.post("/api/arrivals", ensureAdmin, (req, res) => {
 
   settleBets(date, slot);
 
+  return res.json({ success: true, state: composeState() });
+});
+
+app.post("/api/topics", ensureAdmin, (req, res) => {
+  const { title, description } = req.body || {};
+  if (!title || !title.trim()) {
+    return res.status(400).json({ error: "Titel is verplicht" });
+  }
+  const topic = createTopic(title.trim(), (description || "").trim());
+  return res.json({ success: true, topic, state: composeState() });
+});
+
+app.post("/api/topics/:id/activate", ensureAdmin, (req, res) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "Topic id ontbreekt" });
+  const exists = db.prepare(`SELECT id FROM topics WHERE id=?`).get(id);
+  if (!exists) return res.status(404).json({ error: "Topic niet gevonden" });
+  setActiveTopic(id);
   return res.json({ success: true, state: composeState() });
 });
 
@@ -155,6 +189,13 @@ function initDb() {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS topics (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      isActive INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL
+    );
   `);
 }
 
@@ -177,9 +218,11 @@ function getHistory(limit = 30) {
 
 function getBets() {
   const stmt = db.prepare(
-    `SELECT id, bettor, amount, slot, date, odds, status, payout, createdAt
-     FROM bets
-     ORDER BY createdAt DESC`
+    `SELECT b.id, b.bettor, b.amount, b.slot, b.date, b.odds, b.status, b.payout, b.createdAt,
+            t.title AS topicTitle
+     FROM bets b
+     LEFT JOIN topics t ON t.id = b.topicId
+     ORDER BY b.createdAt DESC`
   );
   return stmt.all();
 }
@@ -235,10 +278,15 @@ function settleBets(date, slot) {
       (sum, bet) => sum + bet.amount,
       0
     );
+    const bonusPool = Math.max(0, pot - totalWinningStake);
+    const distributedBonus = bonusPool * WINNER_BONUS_SHARE;
+    const rolloverAddition = bonusPool - distributedBonus;
+    if (rolloverAddition > 0) {
+      setRollover(getRollover() + rolloverAddition);
+    }
     winners.forEach((bet) => {
       const share = bet.amount / totalWinningStake;
-      const bonusPool = pot - totalWinningStake;
-      const payout = Math.round((bet.amount + bonusPool * share) * 100) / 100;
+      const payout = Math.round((bet.amount + distributedBonus * share) * 100) / 100;
       db.prepare(
         `UPDATE bets SET status='won', payout=? WHERE id=?`
       ).run(payout, bet.id);
@@ -272,12 +320,107 @@ function unsolveBets(date) {
   if (!bets.length) return;
 
   const winners = bets.filter((bet) => bet.status === "won");
+  const pot = bets.reduce((sum, bet) => sum + bet.amount, 0);
   if (!winners.length) {
-    const pot = bets.reduce((sum, bet) => sum + bet.amount, 0);
     const updated = Math.max(0, getRollover() - pot);
     setRollover(updated);
+  } else {
+    const totalWinningStake = winners.reduce((sum, bet) => sum + bet.amount, 0);
+    const bonusPool = Math.max(0, pot - totalWinningStake);
+    const rolloverReduction = bonusPool * (1 - WINNER_BONUS_SHARE);
+    if (rolloverReduction > 0) {
+      const updated = Math.max(0, getRollover() - rolloverReduction);
+      setRollover(updated);
+    }
   }
 
   db.prepare(`UPDATE bets SET status='open', payout=0 WHERE date=?`).run(date);
+}
+
+function ensureBetTopicColumn() {
+  const columns = db.prepare(`PRAGMA table_info(bets)`).all();
+  if (!columns.some((col) => col.name === "topicId")) {
+    db.exec(`ALTER TABLE bets ADD COLUMN topicId TEXT`);
+  }
+  const activeTopic = getActiveTopic();
+  if (activeTopic) {
+    db.prepare(`UPDATE bets SET topicId = ? WHERE topicId IS NULL`).run(activeTopic.id);
+  }
+}
+
+function seedDefaultTopic() {
+  const total = db.prepare(`SELECT COUNT(*) as total FROM topics`).get().total;
+  if (total === 0) {
+    const id = crypto.randomUUID();
+    db.prepare(
+      `INSERT INTO topics (id, title, description, isActive, createdAt)
+       VALUES (?, ?, ?, 1, ?)`
+    ).run(
+      id,
+      "Laatkomer",
+      "Voorspel hoe laat de stagiair binnenwandelt.",
+      new Date().toISOString()
+    );
+    setActiveTopic(id);
+  } else if (!getActiveTopic()) {
+    const first = db
+      .prepare(`SELECT id FROM topics ORDER BY createdAt ASC LIMIT 1`)
+      .get();
+    if (first) {
+      setActiveTopic(first.id);
+    }
+  }
+}
+
+function getTopics() {
+  return db
+    .prepare(
+      `SELECT id, title, description, isActive, createdAt
+       FROM topics
+       ORDER BY createdAt DESC`
+    )
+    .all();
+}
+
+function getActiveTopic() {
+  const meta = db.prepare(`SELECT value FROM meta WHERE key='active_topic_id'`).get();
+  if (meta?.value) {
+    const topic = db
+      .prepare(`SELECT id, title, description FROM topics WHERE id=?`)
+      .get(meta.value);
+    if (topic) {
+      return topic;
+    }
+  }
+  const fallback = db
+    .prepare(
+      `SELECT id, title, description FROM topics WHERE isActive=1 ORDER BY createdAt ASC LIMIT 1`
+    )
+    .get();
+  if (fallback) {
+    setActiveTopic(fallback.id);
+    return fallback;
+  }
+  return null;
+}
+
+function setActiveTopic(id) {
+  db.prepare(`UPDATE topics SET isActive = CASE WHEN id=? THEN 1 ELSE 0 END`).run(id);
+  db.prepare(
+    `INSERT INTO meta (key, value) VALUES ('active_topic_id', :value)
+     ON CONFLICT(key) DO UPDATE SET value=:value`
+  ).run({ value: id });
+}
+
+function createTopic(title, description) {
+  const id = crypto.randomUUID();
+  db.prepare(
+    `INSERT INTO topics (id, title, description, isActive, createdAt)
+     VALUES (?, ?, ?, 0, ?)`
+  ).run(id, title, description, new Date().toISOString());
+  if (!getActiveTopic()) {
+    setActiveTopic(id);
+  }
+  return { id, title, description };
 }
 

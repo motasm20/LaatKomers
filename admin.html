@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bet-a-Ben Admin</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body data-page="admin">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">Bet-a-Ben Admin</div>
+      </div>
+      <nav class="nav-links">
+        <a class="nav-link" href="./index.html">← Terug naar game</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="view-header">
+        <div>
+          <p class="eyebrow">Admin cockpit</p>
+          <h1>Beheer aankomsten, onderwerpen & inzetten</h1>
+          <p class="hint">
+            Ontgrendel met je geheime code en pas registraties, onderwerpen en misplaatste
+            bets direct aan zonder dat iemand de pagina hoeft te refreshen.
+          </p>
+        </div>
+      </section>
+
+      <section class="grid two-col">
+        <article class="card">
+          <h3>Admin toegang</h3>
+          <div class="admin-login">
+            <label>
+              Admin code
+              <input
+                type="password"
+                id="adminSecret"
+                placeholder="Geheime code"
+                autocomplete="current-password"
+              />
+            </label>
+            <div class="admin-login-actions">
+              <button type="button" class="secondary" id="adminLoginButton">
+                Ontgrendel
+              </button>
+              <button type="button" class="text-button" id="adminLogoutButton" hidden>
+                Uitloggen
+              </button>
+            </div>
+            <p class="admin-status" id="adminStatus">
+              Alleen admins kunnen aankomsten loggen of verwijderen.
+            </p>
+          </div>
+        </article>
+
+        <article class="card">
+          <h3>Log aankomst</h3>
+          <form id="arrivalForm">
+            <label>
+              Datum
+              <input
+                type="date"
+                name="date"
+                id="arrivalDate"
+                data-lockable="true"
+                required
+              />
+            </label>
+            <label>
+              Aankomsttijd
+              <select name="slot" id="arrivalSlot" data-lockable="true" required></select>
+            </label>
+            <button type="submit" class="secondary" data-lockable="true">
+              Log aankomst
+            </button>
+            <p class="hint">
+              Zodra je een dag invult worden alle inzetten voor die datum automatisch
+              afgerekend.
+            </p>
+          </form>
+        </article>
+      </section>
+
+      <section class="card admin-panel">
+        <div class="panel-header">
+          <div>
+            <h3>Onderwerpen beheren</h3>
+            <p class="hint">Voeg nieuwe onderwerpen toe en activeer er precies één.</p>
+          </div>
+        </div>
+        <div class="admin-columns">
+          <div class="admin-table">
+            <div class="panel-subheader">
+              <h4>Actieve & beschikbare onderwerpen</h4>
+              <p>Alleen admins zien deze lijst.</p>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Naam</th>
+                  <th>Omschrijving</th>
+                  <th>Status</th>
+                  <th>Actie</th>
+                </tr>
+              </thead>
+              <tbody id="topicsTable"></tbody>
+            </table>
+          </div>
+          <div class="admin-table">
+            <div class="panel-subheader">
+              <h4>Nieuw onderwerp</h4>
+              <p>Beschrijf kort wat er te voorspellen valt.</p>
+            </div>
+            <form id="topicForm">
+              <label>
+                Titel
+                <input
+                  type="text"
+                  id="topicTitle"
+                  data-lockable="true"
+                  required
+                  placeholder="Bijv. Laatkomer"
+                />
+              </label>
+              <label>
+                Omschrijving
+                <textarea
+                  id="topicDescription"
+                  rows="3"
+                  data-lockable="true"
+                  placeholder="Extra context of regels"
+                ></textarea>
+              </label>
+              <button type="submit" class="primary" data-lockable="true">
+                Onderwerp opslaan
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section class="card admin-panel">
+        <div class="panel-header">
+          <div>
+            <h3>Beheer & opschonen</h3>
+            <p class="hint">
+              Verwijder foutieve bets of reset een dag als er verkeerd is gelogd.
+            </p>
+          </div>
+        </div>
+        <div class="admin-columns">
+          <div class="admin-table">
+            <div class="panel-subheader">
+              <h4>Inzetten</h4>
+              <p>Alles chronologisch, laatste bovenaan.</p>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Datum</th>
+                  <th>Naam</th>
+                  <th>Onderwerp</th>
+                  <th>Slot</th>
+                  <th>Inzet</th>
+                  <th>Status</th>
+                  <th>Actie</th>
+                </tr>
+              </thead>
+              <tbody id="adminBetsTable"></tbody>
+            </table>
+          </div>
+          <div class="admin-table">
+            <div class="panel-subheader">
+              <h4>Aankomsten</h4>
+              <p>Reset een dag om opnieuw te loggen.</p>
+            </div>
+            <ul id="adminHistoryList" class="history-list admin"></ul>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      Made with ❤️ voor de kantoorhumor crew.
+    </footer>
+
+    <script>
+      window.API_BASE = "https://laatkomers.onrender.com";
+    </script>
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
+

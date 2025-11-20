@@ -4,15 +4,17 @@ const HISTORY_WINDOW = 7;
 const HISTORY_DISPLAY = 14;
 const ADMIN_KEY_STORAGE = "betaben_admin_key";
 const REFRESH_INTERVAL_MS = 15000;
+const PAGE_MODE = document.body.dataset.page || "public";
 
 const state = {
   history: [],
   bets: [],
   rollover: 0,
   odds: {},
+  topics: [],
+  activeTopic: null,
   isAdmin: false,
   adminKey: null,
-  activeView: "play",
 };
 
 const elements = {};
@@ -23,8 +25,8 @@ document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   prepareForms();
   initAdminControls();
-  setupNavigation();
   attachAdminActions();
+  attachTopicActions();
   refreshState();
   startAutoRefresh();
 });
@@ -46,69 +48,80 @@ function cacheElements() {
   elements.adminLoginButton = document.getElementById("adminLoginButton");
   elements.adminLogoutButton = document.getElementById("adminLogoutButton");
   elements.adminStatus = document.getElementById("adminStatus");
-  elements.viewButtons = document.querySelectorAll("[data-view-target]");
-  elements.views = document.querySelectorAll("[data-view]");
   elements.adminBetsTable = document.getElementById("adminBetsTable");
   elements.adminHistoryList = document.getElementById("adminHistoryList");
+  elements.activeTopicTitle = document.getElementById("activeTopicTitle");
+  elements.activeTopicDescription = document.getElementById("activeTopicDescription");
+  elements.betTopicLabel = document.getElementById("betTopicLabel");
+  elements.topicForm = document.getElementById("topicForm");
+  elements.topicTitleInput = document.getElementById("topicTitle");
+  elements.topicDescriptionInput = document.getElementById("topicDescription");
+  elements.topicsTable = document.getElementById("topicsTable");
 }
 
 function prepareForms() {
   const todayISO = toISODate(new Date());
-  elements.betDate.value = todayISO;
-  elements.arrivalDate.value = todayISO;
+  if (elements.betDate) elements.betDate.value = todayISO;
+  if (elements.arrivalDate) elements.arrivalDate.value = todayISO;
 
   renderSlotRadioButtons();
   renderArrivalSlotOptions();
 
-  elements.betForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const formData = new FormData(elements.betForm);
-    const bettor = formData.get("bettor").trim();
-    const amount = parseFloat(formData.get("amount"));
-    const date = formData.get("date");
-    const slot = formData.get("slot");
+  if (elements.betForm) {
+    elements.betForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(elements.betForm);
+      const bettor = formData.get("bettor").trim();
+      const amount = parseFloat(formData.get("amount"));
+      const date = formData.get("date");
+      const slot = formData.get("slot");
 
-    if (!bettor || !slot) return;
-    if (isNaN(amount) || amount <= 0) {
-      alert("Voer een geldige inzet in.");
-      return;
-    }
-    await postJSON(`${API_BASE}/api/bets`, { bettor, amount, slot, date });
-    elements.betForm.reset();
-    elements.betDate.value = date;
-    refreshState();
-  });
-
-  elements.arrivalForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const formData = new FormData(elements.arrivalForm);
-    const date = formData.get("date");
-    const slot = formData.get("slot");
-    if (!state.isAdmin || !state.adminKey) {
-      setAdminStatus("Admin login vereist om te loggen.", true);
-      updateAdminUI();
-      return;
-    }
-    try {
-      await postJSON(
-        `${API_BASE}/api/arrivals`,
-        { date, slot },
-        {
-          "x-admin-key": state.adminKey,
-        }
-      );
-      setAdminStatus("Aankomst geregistreerd ✅");
-      refreshState();
-    } catch (err) {
-      if (err.status === 401) {
-        clearAdminKey();
-        setAdminStatus("Code verlopen of fout. Log opnieuw in.", true);
-      } else {
-        setAdminStatus("Registreren mislukt. Probeer opnieuw.", true);
+      if (!bettor || !slot) return;
+      if (isNaN(amount) || amount <= 0) {
+        alert("Voer een geldige inzet in.");
+        return;
       }
-      updateAdminUI();
-    }
-  });
+      await postJSON(`${API_BASE}/api/bets`, { bettor, amount, slot, date });
+      elements.betForm.reset();
+      if (elements.betDate) {
+        elements.betDate.value = date;
+      }
+      refreshState();
+    });
+  }
+
+  if (elements.arrivalForm) {
+    elements.arrivalForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(elements.arrivalForm);
+      const date = formData.get("date");
+      const slot = formData.get("slot");
+      if (!state.isAdmin || !state.adminKey) {
+        setAdminStatus("Admin login vereist om te loggen.", true);
+        updateAdminUI();
+        return;
+      }
+      try {
+        await postJSON(
+          `${API_BASE}/api/arrivals`,
+          { date, slot },
+          {
+            "x-admin-key": state.adminKey,
+          }
+        );
+        setAdminStatus("Aankomst geregistreerd ✅");
+        refreshState();
+      } catch (err) {
+        if (err.status === 401) {
+          clearAdminKey();
+          setAdminStatus("Code verlopen of fout. Log opnieuw in.", true);
+        } else {
+          setAdminStatus("Registreren mislukt. Probeer opnieuw.", true);
+        }
+        updateAdminUI();
+      }
+    });
+  }
 }
 
 async function refreshState() {
@@ -120,11 +133,15 @@ async function refreshState() {
     state.bets = payload.bets ?? [];
     state.rollover = payload.rollover ?? 0;
     state.odds = payload.odds ?? {};
+     state.topics = payload.topics ?? [];
+     state.activeTopic = payload.activeTopic ?? null;
     renderOddsBoard();
     renderHistory();
     renderBetsTable();
     renderHeroStats();
     renderAdminTables();
+    renderActiveTopic();
+    renderTopicsTable();
   } catch (err) {
     console.warn("Failed to refresh state", err);
   } finally {
@@ -133,6 +150,7 @@ async function refreshState() {
 }
 
 function renderSlotRadioButtons() {
+  if (!elements.slotOptions) return;
   elements.slotOptions.innerHTML = "";
   SLOT_OPTIONS.forEach((slot, index) => {
     const label = document.createElement("label");
@@ -157,12 +175,14 @@ function renderSlotRadioButtons() {
 }
 
 function renderArrivalSlotOptions() {
+  if (!elements.arrivalSlot) return;
   elements.arrivalSlot.innerHTML = SLOT_OPTIONS.map(
     (slot) => `<option value="${slot}">${slot}</option>`
   ).join("");
 }
 
 function renderOddsBoard() {
+  if (!elements.oddsBoard) return;
   elements.oddsBoard.innerHTML = "";
   SLOT_OPTIONS.forEach((slot) => {
     const value = state.odds[slot] ?? 1;
@@ -174,7 +194,7 @@ function renderOddsBoard() {
     `;
     elements.oddsBoard.appendChild(pill);
 
-    const multiplierSpan = elements.slotOptions.querySelector(
+    const multiplierSpan = elements.slotOptions?.querySelector(
       `[data-slot="${slot}"]`
     );
     if (multiplierSpan) {
@@ -184,6 +204,7 @@ function renderOddsBoard() {
 }
 
 function renderHistory() {
+  if (!elements.historyList) return;
   const sorted = state.history
     .slice()
     .sort((a, b) => (a.date < b.date ? 1 : -1))
@@ -207,8 +228,9 @@ function renderHistory() {
 }
 
 function renderBetsTable() {
+  if (!elements.betsTable) return;
   if (!state.bets.length) {
-    elements.betsTable.innerHTML = `<tr><td colspan="6">Geen inzetten... nog 😉</td></tr>`;
+    elements.betsTable.innerHTML = `<tr><td colspan="7">Geen inzetten... nog 😉</td></tr>`;
     return;
   }
 
@@ -224,16 +246,17 @@ function renderBetsTable() {
           : "open";
       const payout =
         bet.status === "won"
-          ? `+ €${Number(bet.payout || 0).toFixed(2)}`
+          ? `+${formatCurrency(bet.payout)}`
           : bet.status === "lost"
-          ? `- €${Number(bet.amount || 0).toFixed(2)}`
-          : `-`;
+          ? `-${formatCurrency(bet.amount)}`
+          : "-";
       return `
         <tr>
           <td>${formatDate(bet.date)}</td>
           <td>${bet.bettor}</td>
+          <td>${bet.topicTitle || "-"}</td>
           <td>${bet.slot}</td>
-          <td>€${Number(bet.amount || 0).toFixed(2)}</td>
+          <td>${formatCurrency(bet.amount)}</td>
           <td><span class="status-chip ${chipClass}">${bet.status}</span></td>
           <td>${payout}</td>
         </tr>
@@ -245,15 +268,17 @@ function renderBetsTable() {
 }
 
 function renderHeroStats() {
+  if (!elements.streakValue || !elements.hotSlot || !elements.potValue) return;
   const elevenStreak = getStreakForSlot("11:00");
   const hotSlot = getHotSlot();
   const pot = state.bets
     .filter((bet) => bet.status === "open")
     .reduce((sum, bet) => sum + Number(bet.amount || 0), 0);
+  const totalPool = pot + Number(state.rollover || 0);
 
   elements.streakValue.textContent = elevenStreak;
   elements.hotSlot.textContent = hotSlot || "n/a";
-  elements.potValue.textContent = `€${(pot + Number(state.rollover || 0)).toFixed(2)}`;
+  elements.potValue.textContent = formatCurrency(totalPool);
 }
 
 function getStreakForSlot(slot) {
@@ -272,10 +297,24 @@ function getHotSlot() {
   return entries.sort((a, b) => a[1] - b[1])[0][0];
 }
 
+function renderActiveTopic() {
+  const topic = state.activeTopic;
+  if (elements.activeTopicTitle) {
+    elements.activeTopicTitle.textContent = topic?.title || "Geen onderwerp";
+  }
+  if (elements.activeTopicDescription) {
+    elements.activeTopicDescription.textContent =
+      topic?.description || "Zodra er een onderwerp actief is zie je dat hier.";
+  }
+  if (elements.betTopicLabel) {
+    elements.betTopicLabel.textContent = topic?.title || "-";
+  }
+}
+
 function renderAdminTables() {
   if (!elements.adminBetsTable) return;
   if (!state.isAdmin || !state.adminKey) {
-    elements.adminBetsTable.innerHTML = `<tr><td colspan="6">Log in als admin om inzetten te beheren.</td></tr>`;
+    elements.adminBetsTable.innerHTML = `<tr><td colspan="7">Log in als admin om inzetten te beheren.</td></tr>`;
     if (elements.adminHistoryList) {
       elements.adminHistoryList.innerHTML =
         '<li><span>Log in om aankomsten te beheren.</span></li>';
@@ -297,8 +336,9 @@ function renderAdminTables() {
         <tr>
           <td>${formatDate(bet.date)}</td>
           <td>${bet.bettor}</td>
+          <td>${bet.topicTitle || "-"}</td>
           <td>${bet.slot}</td>
-          <td>€${Number(bet.amount || 0).toFixed(2)}</td>
+          <td>${formatCurrency(bet.amount)}</td>
           <td><span class="status-chip ${chipClass}">${bet.status}</span></td>
           <td style="text-align:right">
             <button class="icon-button" data-action="delete-bet" data-bet-id="${bet.id}">Verwijder</button>
@@ -309,7 +349,7 @@ function renderAdminTables() {
     .join("");
 
   elements.adminBetsTable.innerHTML =
-    rows || `<tr><td colspan="6">Geen inzetten gevonden.</td></tr>`;
+    rows || `<tr><td colspan="7">Geen inzetten gevonden.</td></tr>`;
 
   if (!elements.adminHistoryList) return;
 
@@ -336,33 +376,71 @@ function renderAdminTables() {
     historyItems || "<li><span>Nog geen aankomsten.</span></li>";
 }
 
+function renderTopicsTable() {
+  if (!elements.topicsTable) return;
+  if (!state.isAdmin || !state.adminKey) {
+    elements.topicsTable.innerHTML = `<tr><td colspan="4">Log in om onderwerpen te beheren.</td></tr>`;
+    return;
+  }
+  if (!state.topics.length) {
+    elements.topicsTable.innerHTML = `<tr><td colspan="4">Nog geen onderwerpen.</td></tr>`;
+    return;
+  }
+
+  const rows = state.topics
+    .map((topic) => {
+      const badge = topic.isActive ? '<span class="chip">Actief</span>' : "";
+      return `
+        <tr>
+          <td>${topic.title}</td>
+          <td>${topic.description || "-"}</td>
+          <td>${badge}</td>
+          <td style="text-align:right">
+            ${
+              topic.isActive
+                ? ""
+                : `<button class="icon-button" data-action="activate-topic" data-topic-id="${topic.id}">Activeer</button>`
+            }
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  elements.topicsTable.innerHTML = rows;
+}
+
 function initAdminControls() {
   loadAdminKey();
-  elements.adminLoginButton.addEventListener("click", async () => {
-    const secret = elements.adminSecret.value.trim();
-    if (!secret) {
-      setAdminStatus("Vul een code in.", true);
-      return;
-    }
-    try {
-      await postJSON(`${API_BASE}/api/login`, { secret });
-      state.adminKey = secret;
-      state.isAdmin = true;
-      sessionStorage.setItem(ADMIN_KEY_STORAGE, secret);
-      elements.adminSecret.value = "";
-      setAdminStatus("Admin modus actief ✅");
-    } catch (err) {
-      setAdminStatus("Code ongeldig.", true);
-      return;
-    }
-    updateAdminUI();
-  });
+  if (elements.adminLoginButton) {
+    elements.adminLoginButton.addEventListener("click", async () => {
+      const secret = elements.adminSecret.value.trim();
+      if (!secret) {
+        setAdminStatus("Vul een code in.", true);
+        return;
+      }
+      try {
+        await postJSON(`${API_BASE}/api/login`, { secret });
+        state.adminKey = secret;
+        state.isAdmin = true;
+        sessionStorage.setItem(ADMIN_KEY_STORAGE, secret);
+        elements.adminSecret.value = "";
+        setAdminStatus("Admin modus actief ✅");
+      } catch (err) {
+        setAdminStatus("Code ongeldig.", true);
+        return;
+      }
+      updateAdminUI();
+    });
+  }
 
-  elements.adminLogoutButton.addEventListener("click", () => {
-    clearAdminKey();
-    setAdminStatus("Uitgelogd.");
-    updateAdminUI();
-  });
+  if (elements.adminLogoutButton) {
+    elements.adminLogoutButton.addEventListener("click", () => {
+      clearAdminKey();
+      setAdminStatus("Uitgelogd.");
+      updateAdminUI();
+    });
+  }
 
   updateAdminUI();
 }
@@ -385,17 +463,25 @@ function clearAdminKey() {
 }
 
 function updateAdminUI() {
-  if (!elements.arrivalForm) return;
-  const lockable = elements.arrivalForm.querySelectorAll("[data-lockable='true']");
-  lockable.forEach((el) => {
-    el.disabled = !state.isAdmin;
-  });
-  elements.adminLogoutButton.hidden = !state.isAdmin;
-  elements.adminLoginButton.disabled = state.isAdmin;
-  elements.adminSecret.disabled = state.isAdmin;
-  elements.adminSecret.placeholder = state.isAdmin ? "Admin actief" : "Geheime code";
-  elements.adminStatus.classList.toggle("active", state.isAdmin);
-  elements.adminStatus.classList.toggle("error", false);
+  document
+    .querySelectorAll("[data-lockable='true']")
+    .forEach((el) => {
+      el.disabled = !state.isAdmin;
+    });
+  if (elements.adminLogoutButton) {
+    elements.adminLogoutButton.hidden = !state.isAdmin;
+  }
+  if (elements.adminLoginButton) {
+    elements.adminLoginButton.disabled = state.isAdmin;
+  }
+  if (elements.adminSecret) {
+    elements.adminSecret.disabled = state.isAdmin;
+    elements.adminSecret.placeholder = state.isAdmin ? "Admin actief" : "Geheime code";
+  }
+  if (elements.adminStatus) {
+    elements.adminStatus.classList.toggle("active", state.isAdmin);
+    elements.adminStatus.classList.toggle("error", false);
+  }
 }
 
 function setAdminStatus(message, isError = false) {
@@ -493,8 +579,59 @@ function attachAdminActions() {
 function ensureAdminAccess(message) {
   if (state.isAdmin && state.adminKey) return true;
   setAdminStatus(message, true);
-  switchView("admin");
+  if (PAGE_MODE !== "admin") {
+    window.location.href = "./admin.html";
+  }
   return false;
+}
+
+function attachTopicActions() {
+  if (elements.topicForm) {
+    elements.topicForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!ensureAdminAccess("Log in om onderwerpen toe te voegen.")) return;
+      const title = elements.topicTitleInput.value.trim();
+      const description = elements.topicDescriptionInput.value.trim();
+      if (!title) {
+        alert("Titel is verplicht.");
+        return;
+      }
+      try {
+        await postJSON(
+          `${API_BASE}/api/topics`,
+          { title, description },
+          { "x-admin-key": state.adminKey }
+        );
+        elements.topicForm.reset();
+        setAdminStatus("Onderwerp opgeslagen ✅");
+        refreshState();
+      } catch (error) {
+        setAdminStatus("Onderwerp opslaan mislukt.", true);
+        console.error(error);
+      }
+    });
+  }
+
+  if (elements.topicsTable) {
+    elements.topicsTable.addEventListener("click", async (event) => {
+      const target = event.target.closest("[data-action='activate-topic']");
+      if (!target) return;
+      if (!ensureAdminAccess("Log in om onderwerp te activeren.")) return;
+      const topicId = target.dataset.topicId;
+      try {
+        await postJSON(
+          `${API_BASE}/api/topics/${topicId}/activate`,
+          {},
+          { "x-admin-key": state.adminKey }
+        );
+        setAdminStatus("Onderwerp geactiveerd.");
+        refreshState();
+      } catch (error) {
+        setAdminStatus("Activeren mislukt.", true);
+        console.error(error);
+      }
+    });
+  }
 }
 
 function toISODate(date) {
@@ -542,5 +679,10 @@ async function deleteJSON(url, extraHeaders = {}) {
     throw error;
   }
   return res.json();
+}
+
+function formatCurrency(value) {
+  const amount = Number(value) || 0;
+  return `€${amount.toFixed(2)}`;
 }
 
