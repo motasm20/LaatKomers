@@ -85,6 +85,34 @@ app.post("/api/arrivals", ensureAdmin, (req, res) => {
   return res.json({ success: true, state: composeState() });
 });
 
+app.delete("/api/bets/:id", ensureAdmin, (req, res) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "Bet id ontbreekt" });
+
+  const stmt = db.prepare(`DELETE FROM bets WHERE id = ?`);
+  const info = stmt.run(id);
+  if (!info.changes) {
+    return res.status(404).json({ error: "Bet niet gevonden" });
+  }
+
+  return res.json({ success: true, state: composeState() });
+});
+
+app.delete("/api/arrivals/:date", ensureAdmin, (req, res) => {
+  const { date } = req.params;
+  if (!date) return res.status(400).json({ error: "Datum ontbreekt" });
+
+  const existing = db.prepare(`SELECT * FROM arrivals WHERE date=?`).get(date);
+  if (!existing) {
+    return res.status(404).json({ error: "Deze dag heeft geen log." });
+  }
+
+  unsolveBets(date);
+  db.prepare(`DELETE FROM arrivals WHERE date=?`).run(date);
+
+  return res.json({ success: true, state: composeState() });
+});
+
 app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
@@ -224,5 +252,21 @@ function ensureAdmin(req, res, next) {
     return res.status(401).json({ error: "Admin authenticatie vereist." });
   }
   return next();
+}
+
+function unsolveBets(date) {
+  const bets = db
+    .prepare(`SELECT * FROM bets WHERE date=? AND status!='open'`)
+    .all(date);
+  if (!bets.length) return;
+
+  const winners = bets.filter((bet) => bet.status === "won");
+  if (!winners.length) {
+    const pot = bets.reduce((sum, bet) => sum + bet.amount, 0);
+    const updated = Math.max(0, getRollover() - pot);
+    setRollover(updated);
+  }
+
+  db.prepare(`UPDATE bets SET status='open', payout=0 WHERE date=?`).run(date);
 }
 

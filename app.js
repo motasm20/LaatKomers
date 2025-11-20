@@ -12,6 +12,7 @@ const state = {
   odds: {},
   isAdmin: false,
   adminKey: null,
+  activeView: "play",
 };
 
 const elements = {};
@@ -22,6 +23,8 @@ document.addEventListener("DOMContentLoaded", () => {
   cacheElements();
   prepareForms();
   initAdminControls();
+  setupNavigation();
+  attachAdminActions();
   refreshState();
   startAutoRefresh();
 });
@@ -43,6 +46,10 @@ function cacheElements() {
   elements.adminLoginButton = document.getElementById("adminLoginButton");
   elements.adminLogoutButton = document.getElementById("adminLogoutButton");
   elements.adminStatus = document.getElementById("adminStatus");
+  elements.viewButtons = document.querySelectorAll("[data-view-target]");
+  elements.views = document.querySelectorAll("[data-view]");
+  elements.adminBetsTable = document.getElementById("adminBetsTable");
+  elements.adminHistoryList = document.getElementById("adminHistoryList");
 }
 
 function prepareForms() {
@@ -113,6 +120,7 @@ async function refreshState() {
     renderHistory();
     renderBetsTable();
     renderHeroStats();
+    renderAdminTables();
   } catch (err) {
     console.warn("Failed to refresh state", err);
   } finally {
@@ -260,6 +268,70 @@ function getHotSlot() {
   return entries.sort((a, b) => a[1] - b[1])[0][0];
 }
 
+function renderAdminTables() {
+  if (!elements.adminBetsTable) return;
+  if (!state.isAdmin || !state.adminKey) {
+    elements.adminBetsTable.innerHTML = `<tr><td colspan="6">Log in als admin om inzetten te beheren.</td></tr>`;
+    if (elements.adminHistoryList) {
+      elements.adminHistoryList.innerHTML =
+        '<li><span>Log in om aankomsten te beheren.</span></li>';
+    }
+    return;
+  }
+
+  const rows = state.bets
+    .slice()
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .map((bet) => {
+      const chipClass =
+        bet.status === "won"
+          ? "won"
+          : bet.status === "lost"
+          ? "lost"
+          : "open";
+      return `
+        <tr>
+          <td>${formatDate(bet.date)}</td>
+          <td>${bet.bettor}</td>
+          <td>${bet.slot}</td>
+          <td>${bet.amount}</td>
+          <td><span class="status-chip ${chipClass}">${bet.status}</span></td>
+          <td style="text-align:right">
+            <button class="icon-button" data-action="delete-bet" data-bet-id="${bet.id}">Verwijder</button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  elements.adminBetsTable.innerHTML =
+    rows || `<tr><td colspan="6">Geen inzetten gevonden.</td></tr>`;
+
+  if (!elements.adminHistoryList) return;
+
+  const historyItems = state.history
+    .slice()
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .slice(0, HISTORY_DISPLAY)
+    .map(
+      ({ date, slot }) => `
+        <li>
+          <div>
+            <strong>${slot}</strong>
+            <p class="hint">${formatDate(date)}</p>
+          </div>
+          <button class="icon-button" data-action="delete-arrival" data-date="${date}">
+            Reset
+          </button>
+        </li>
+      `
+    )
+    .join("");
+
+  elements.adminHistoryList.innerHTML =
+    historyItems || "<li><span>Nog geen aankomsten.</span></li>";
+}
+
 function initAdminControls() {
   loadAdminKey();
   elements.adminLoginButton.addEventListener("click", async () => {
@@ -337,6 +409,90 @@ function startAutoRefresh() {
   }, REFRESH_INTERVAL_MS);
 }
 
+async function deleteBet(id) {
+  try {
+    await deleteJSON(`${API_BASE}/api/bets/${id}`, {
+      "x-admin-key": state.adminKey,
+    });
+    setAdminStatus("Inzet verwijderd.");
+    refreshState();
+  } catch (error) {
+    setAdminStatus("Verwijderen mislukt.", true);
+    console.error(error);
+  }
+}
+
+async function deleteArrival(date) {
+  try {
+    await deleteJSON(`${API_BASE}/api/arrivals/${date}`, {
+      "x-admin-key": state.adminKey,
+    });
+    setAdminStatus("Aankomst verwijderd, inzetten opnieuw geopend.");
+    refreshState();
+  } catch (error) {
+    setAdminStatus("Kon aankomst niet verwijderen.", true);
+    console.error(error);
+  }
+}
+
+function setupNavigation() {
+  if (!elements.viewButtons) return;
+  elements.viewButtons.forEach((button) => {
+    button.addEventListener("click", (event) => {
+      const target = button.dataset.viewTarget;
+      if (target) {
+        event.preventDefault?.();
+        switchView(target);
+      }
+    });
+  });
+  switchView(state.activeView);
+}
+
+function switchView(view) {
+  if (!view) return;
+  state.activeView = view;
+  elements.views.forEach((section) => {
+    section.classList.toggle("active", section.dataset.view === view);
+  });
+  elements.viewButtons.forEach((button) => {
+    if (button.classList.contains("nav-link")) {
+      button.classList.toggle("active", button.dataset.viewTarget === view);
+    }
+  });
+}
+
+function attachAdminActions() {
+  elements.adminBetsTable?.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-action='delete-bet']");
+    if (!target) return;
+    if (!ensureAdminAccess("Log in om inzetten te verwijderen.")) return;
+    const betId = target.dataset.betId;
+    if (!betId) return;
+    const confirmed = window.confirm("Weet je zeker dat je deze inzet wilt verwijderen?");
+    if (!confirmed) return;
+    deleteBet(betId);
+  });
+
+  elements.adminHistoryList?.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-action='delete-arrival']");
+    if (!target) return;
+    if (!ensureAdminAccess("Log in om aankomsten te verwijderen.")) return;
+    const date = target.dataset.date;
+    if (!date) return;
+    const confirmed = window.confirm("Aankomst verwijderen en inzetten resetten voor deze dag?");
+    if (!confirmed) return;
+    deleteArrival(date);
+  });
+}
+
+function ensureAdminAccess(message) {
+  if (state.isAdmin && state.adminKey) return true;
+  setAdminStatus(message, true);
+  switchView("admin");
+  return false;
+}
+
 function toISODate(date) {
   return date.toISOString().slice(0, 10);
 }
@@ -360,6 +516,21 @@ async function postJSON(url, payload, extraHeaders = {}) {
       ...extraHeaders,
     },
     body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const error = new Error(`Request failed: ${res.status}`);
+    error.status = res.status;
+    throw error;
+  }
+  return res.json();
+}
+
+async function deleteJSON(url, extraHeaders = {}) {
+  const res = await fetch(url, {
+    method: "DELETE",
+    headers: {
+      ...extraHeaders,
+    },
   });
   if (!res.ok) {
     const error = new Error(`Request failed: ${res.status}`);
