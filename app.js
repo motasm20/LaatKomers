@@ -64,11 +64,15 @@ function prepareForms() {
     event.preventDefault();
     const formData = new FormData(elements.betForm);
     const bettor = formData.get("bettor").trim();
-    const amount = Number(formData.get("amount"));
+    const amount = parseFloat(formData.get("amount"));
     const date = formData.get("date");
     const slot = formData.get("slot");
 
     if (!bettor || !slot) return;
+    if (isNaN(amount) || amount <= 0) {
+      alert("Voer een geldige inzet in.");
+      return;
+    }
     await postJSON(`${API_BASE}/api/bets`, { bettor, amount, slot, date });
     elements.betForm.reset();
     elements.betDate.value = date;
@@ -220,16 +224,16 @@ function renderBetsTable() {
           : "open";
       const payout =
         bet.status === "won"
-          ? `+${bet.payout}`
+          ? `+ €${Number(bet.payout || 0).toFixed(2)}`
           : bet.status === "lost"
-          ? `- ${bet.amount}`
-          : "-";
+          ? `- €${Number(bet.amount || 0).toFixed(2)}`
+          : `-`;
       return `
         <tr>
           <td>${formatDate(bet.date)}</td>
           <td>${bet.bettor}</td>
           <td>${bet.slot}</td>
-          <td>${bet.amount}</td>
+          <td>€${Number(bet.amount || 0).toFixed(2)}</td>
           <td><span class="status-chip ${chipClass}">${bet.status}</span></td>
           <td>${payout}</td>
         </tr>
@@ -245,11 +249,11 @@ function renderHeroStats() {
   const hotSlot = getHotSlot();
   const pot = state.bets
     .filter((bet) => bet.status === "open")
-    .reduce((sum, bet) => sum + bet.amount, 0);
+    .reduce((sum, bet) => sum + Number(bet.amount || 0), 0);
 
   elements.streakValue.textContent = elevenStreak;
   elements.hotSlot.textContent = hotSlot || "n/a";
-  elements.potValue.textContent = pot + state.rollover;
+  elements.potValue.textContent = `€${(pot + Number(state.rollover || 0)).toFixed(2)}`;
 }
 
 function getStreakForSlot(slot) {
@@ -294,7 +298,7 @@ function renderAdminTables() {
           <td>${formatDate(bet.date)}</td>
           <td>${bet.bettor}</td>
           <td>${bet.slot}</td>
-          <td>${bet.amount}</td>
+          <td>€${Number(bet.amount || 0).toFixed(2)}</td>
           <td><span class="status-chip ${chipClass}">${bet.status}</span></td>
           <td style="text-align:right">
             <button class="icon-button" data-action="delete-bet" data-bet-id="${bet.id}">Verwijder</button>
