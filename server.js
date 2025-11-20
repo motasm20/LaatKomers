@@ -3,6 +3,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import Database from "better-sqlite3";
+import crypto from "crypto";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,7 +11,7 @@ const __dirname = path.dirname(__filename);
 const SLOT_OPTIONS = ["08:00", "09:00", "10:00", "11:00", "12:00", "13:00"];
 const HISTORY_WINDOW = 7;
 const ADMIN_SECRET = process.env.ADMIN_SECRET || "";
-const WINNER_BONUS_SHARE = 0.4;
+const HOUSE_MARGIN = Number(process.env.HOUSE_MARGIN ?? 0.12);
 
 const app = express();
 const db = new Database(path.join(__dirname, "data.db"));
@@ -241,6 +242,13 @@ function setRollover(value) {
   stmt.run({ value: String(value) });
 }
 
+function adjustRollover(delta) {
+  if (!delta) return;
+  const current = getRollover();
+  const next = Math.max(0, current + delta);
+  setRollover(next);
+}
+
 function calculateOdds(history) {
   const recent = history.slice(0, HISTORY_WINDOW);
   const counts = SLOT_OPTIONS.reduce((acc, slot) => {
@@ -272,25 +280,26 @@ function settleBets(date, slot) {
   const losers = bets.filter((bet) => bet.slot !== slot);
 
   if (!winners.length) {
-    setRollover(getRollover() + pot);
+    adjustRollover(pot);
   } else {
-    const totalWinningStake = winners.reduce(
-      (sum, bet) => sum + bet.amount,
-      0
-    );
-    const bonusPool = Math.max(0, pot - totalWinningStake);
-    const distributedBonus = bonusPool * WINNER_BONUS_SHARE;
-    const rolloverAddition = bonusPool - distributedBonus;
-    if (rolloverAddition > 0) {
-      setRollover(getRollover() + rolloverAddition);
-    }
+    let totalPaid = 0;
     winners.forEach((bet) => {
-      const share = bet.amount / totalWinningStake;
-      const payout = Math.round((bet.amount + distributedBonus * share) * 100) / 100;
+      const gross = bet.amount * (bet.odds || 1);
+      const marginCut = gross * HOUSE_MARGIN;
+      const payout = Math.max(
+        0,
+        Math.round((gross - marginCut) * 100) / 100
+      );
+      totalPaid += payout;
       db.prepare(
         `UPDATE bets SET status='won', payout=? WHERE id=?`
       ).run(payout, bet.id);
     });
+
+    const houseDelta = pot - totalPaid;
+    if (houseDelta !== 0) {
+      adjustRollover(houseDelta);
+    }
   }
 
   losers.forEach((bet) => {
@@ -321,19 +330,11 @@ function unsolveBets(date) {
 
   const winners = bets.filter((bet) => bet.status === "won");
   const pot = bets.reduce((sum, bet) => sum + bet.amount, 0);
-  if (!winners.length) {
-    const updated = Math.max(0, getRollover() - pot);
-    setRollover(updated);
-  } else {
-    const totalWinningStake = winners.reduce((sum, bet) => sum + bet.amount, 0);
-    const bonusPool = Math.max(0, pot - totalWinningStake);
-    const rolloverReduction = bonusPool * (1 - WINNER_BONUS_SHARE);
-    if (rolloverReduction > 0) {
-      const updated = Math.max(0, getRollover() - rolloverReduction);
-      setRollover(updated);
-    }
+  const totalPaid = winners.reduce((sum, bet) => sum + (bet.payout || 0), 0);
+  const houseDelta = pot - totalPaid;
+  if (houseDelta !== 0) {
+    adjustRollover(-houseDelta);
   }
-
   db.prepare(`UPDATE bets SET status='open', payout=0 WHERE date=?`).run(date);
 }
 
