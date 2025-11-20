@@ -34,9 +34,20 @@ app.get("/api/state", (_req, res) => {
 app.post("/api/bets", (req, res) => {
   const { bettor, amount, slot, date } = req.body || {};
 
-  if (!bettor || !amount || !slot || !date || !SLOT_OPTIONS.includes(slot)) {
+  const numericAmount = Number(amount);
+  if (
+    !bettor ||
+    !slot ||
+    !date ||
+    !SLOT_OPTIONS.includes(slot) ||
+    !isFinite(numericAmount) ||
+    numericAmount <= 0
+  ) {
     return res.status(400).json({ error: "Invalid payload" });
   }
+
+  // Store amounts rounded to cents
+  const storedAmount = Math.round(numericAmount * 100) / 100;
 
   const odds = calculateOdds(getHistory())[slot] ?? 1.5;
 
@@ -46,7 +57,7 @@ app.post("/api/bets", (req, res) => {
   );
   const id = crypto.randomUUID();
   const createdAt = new Date().toISOString();
-  stmt.run(id, bettor.trim(), amount, slot, date, Number(odds.toFixed(2)), createdAt);
+  stmt.run(id, bettor.trim(), storedAmount, slot, date, Number(odds.toFixed(2)), createdAt);
 
   return res.json({ success: true, state: composeState() });
 });
@@ -132,7 +143,7 @@ function initDb() {
     CREATE TABLE IF NOT EXISTS bets (
       id TEXT PRIMARY KEY,
       bettor TEXT NOT NULL,
-      amount INTEGER NOT NULL,
+      amount REAL NOT NULL,
       slot TEXT NOT NULL,
       date TEXT NOT NULL,
       odds REAL NOT NULL,
