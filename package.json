@@ -1,0 +1,16 @@
+{
+  "name": "bet-a-ben",
+  "version": "1.0.0",
+  "description": "Playful office betting game for intern arrival times",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
+

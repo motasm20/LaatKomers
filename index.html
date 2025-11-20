@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Intern Arrival Bookie</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <header>
+      <div class="logo">Bet-a-Ben</div>
+      <div class="tagline">
+        Raad de aankomsttijd van onze favoriete laatkomer en win de koffiekas 💸☕
+      </div>
+    </header>
+
+    <main>
+      <section class="hero-card">
+        <div>
+          <h1>Hoe laat rolt hij binnen?</h1>
+          <p>
+            Kies een timeslot, zet punten in en wacht tot de stagiair daadwerkelijk
+            verschijnt. Odds worden op basis van de laatste dagen automatisch
+            aangepast. Pure kantoor-glorie.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="stat">
+            <span id="streakValue">0</span>
+            <p>Days @ 11:00</p>
+          </div>
+          <div class="stat">
+            <span id="hotSlot">11:00</span>
+            <p>Hot streak slot</p>
+          </div>
+          <div class="stat">
+            <span id="potValue">0</span>
+            <p>Pot (spaarpunten)</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid two-col">
+        <article class="card">
+          <h2>Maak een gok</h2>
+          <form id="betForm">
+            <label>
+              Naam
+              <input type="text" name="bettor" placeholder="Bijv. Fatima" required />
+            </label>
+            <label>
+              Inzet (punten)
+              <input
+                type="number"
+                name="amount"
+                min="5"
+                step="5"
+                value="10"
+                required
+              />
+            </label>
+            <label>
+              Datum
+              <input type="date" name="date" id="betDate" required />
+            </label>
+            <fieldset>
+              <legend>Tijdslot</legend>
+              <div id="slotOptions" class="slot-options"></div>
+            </fieldset>
+            <button type="submit" class="primary">Plaats inzet</button>
+          </form>
+        </article>
+
+        <article class="card odds-card">
+          <h2>Live odds (laatste 7 dagen)</h2>
+          <div id="oddsBoard" class="odds-board"></div>
+          <p class="hint">
+            Odds = (7 + totale slots) / (1 + aantal keer dat dit slot voorkwam).
+            Hoe vaker hij voor 11:00 te laat was, hoe heftiger de multiplier op
+            andere tijden.
+          </p>
+        </article>
+      </section>
+
+      <section class="grid two-col">
+        <article class="card">
+          <h2>Registreer echte aankomst</h2>
+          <form id="arrivalForm">
+            <label>
+              Datum
+              <input type="date" name="date" id="arrivalDate" required />
+            </label>
+            <label>
+              Aankomsttijd
+              <select name="slot" id="arrivalSlot" required></select>
+            </label>
+            <button type="submit" class="secondary">Log aankomst</button>
+          </form>
+          <p class="hint">
+            Zodra je een dag invult worden alle inzetten voor die datum
+            automatisch afgerekend.
+          </p>
+        </article>
+
+        <article class="card">
+          <h2>Historie laatste 14 dagen</h2>
+          <ul id="historyList" class="history-list"></ul>
+        </article>
+      </section>
+
+      <section class="card">
+        <h2>Openstaande & afgerekende inzetten</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Datum</th>
+              <th>Naam</th>
+              <th>Tijdslot</th>
+              <th>Inzet</th>
+              <th>Status</th>
+              <th>Payout</th>
+            </tr>
+          </thead>
+          <tbody id="betsTable"></tbody>
+        </table>
+      </section>
+
+      <section class="card ideas-card">
+        <h2>Bonus ideeën</h2>
+        <ul>
+          <li>Leaderboards met badges als “Serial Snoozer” of “Clock Whisperer”.</li>
+          <li>Automatisch Slack-meldingen wanneer iemand zijn bet wint.</li>
+          <li>Wheel of Misfortune voor strafacties (koffie halen, snack meenemen).</li>
+          <li>Tijdmachine-modus: voorspellen voor de hele week in één keer.</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      Made with ❤️ voor de kantoorhumor crew.
+    </footer>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>
+
